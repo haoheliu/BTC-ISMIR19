@@ -247,7 +247,7 @@ class BTCChordRecognizer:
                         break
         
         # Apply 0.1 second delay to compensate for early detection
-        chord_segments = self._apply_chord_delay(chord_segments, delay_seconds=0.08)
+        # chord_segments = self._apply_chord_delay(chord_segments, delay_seconds=0.08)
         
         results = {
             'audio_file': str(audio_path),
