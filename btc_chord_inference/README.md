@@ -124,6 +124,26 @@ Recognize chords from raw audio waveform data.
   - `num_samples`: Number of samples in the waveform
   - `chord_segments`: List of chord segments with start/end times and chord names
 
+#### `recognize_waveforms_batch(waveforms, sample_rates, audio_names=None, save_results=True, output_dir=None)`
+
+Recognize chords from multiple raw audio waveforms in batch.
+
+**Parameters:**
+- `waveforms` (list): List of raw audio waveforms (each is 1D numpy array)
+- `sample_rates` (list): List of sample rates corresponding to each waveform
+- `audio_names` (list, optional): List of names for each waveform
+- `save_results` (bool): Whether to save results to files
+- `output_dir` (str, optional): Output directory for results
+
+**Returns:**
+- `list`: List of result dictionaries, one for each waveform
+
+**Benefits:**
+- Process multiple waveforms efficiently
+- Consistent API with single waveform processing
+- Organized results structure
+- Perfect for processing audio collections
+
 #### `recognize_batch(audio_dir, output_dir=None, file_extensions=('.mp3', '.wav'))`
 
 Recognize chords for all audio files in a directory.
@@ -242,6 +262,33 @@ t = np.linspace(0, duration, int(sample_rate * duration), False)
 synthetic_waveform = np.sin(2 * np.pi * 440 * t)  # 440 Hz sine wave
 
 results = recognizer.recognize_waveform(synthetic_waveform, sample_rate)
+```
+
+### Batch Waveform Processing
+```python
+import numpy as np
+import librosa
+
+recognizer = BTCChordRecognizer()
+
+# Load multiple audio files as waveforms
+waveforms = []
+sample_rates = []
+audio_names = []
+
+for audio_file in ['song1.mp3', 'song2.mp3', 'song3.mp3']:
+    waveform, sr = librosa.load(audio_file, sr=None, mono=True)
+    waveforms.append(waveform)
+    sample_rates.append(sr)
+    audio_names.append(Path(audio_file).stem)
+
+# Process all waveforms in batch
+results = recognizer.recognize_waveforms_batch(waveforms, sample_rates, audio_names)
+
+# Access results for each waveform
+for result in results:
+    print(f"Processed: {result['audio_file']}")
+    print(f"Chords: {len(result['chord_segments'])} segments")
 ```
 
 ### Batch Processing

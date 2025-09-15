@@ -40,6 +40,12 @@ def waveform_to_features(waveform, sample_rate, config):
     """
     # Resample if necessary
     target_sr = config.mp3['song_hz']
+    # Ensure sample_rate is a scalar integer
+    if hasattr(sample_rate, '__len__') and len(sample_rate) > 0:
+        sample_rate = int(sample_rate[0])
+    else:
+        sample_rate = int(sample_rate)
+    
     if sample_rate != target_sr:
         waveform = librosa.resample(waveform, orig_sr=sample_rate, target_sr=target_sr)
         sample_rate = target_sr
@@ -431,6 +437,156 @@ class BTCChordRecognizer:
             
         except ImportError:
             logger_info("mir_eval or pretty_midi not available. MIDI file not generated.")
+    
+    def recognize_waveforms_batch(self, waveforms, sample_rates, audio_names=None, save_results=False, output_dir=None):
+        """
+        Recognize chords from multiple raw audio waveforms in batch
+        
+        Args:
+            waveforms (list): List of raw audio waveforms (each is 1D numpy array)
+            sample_rates (list): List of sample rates corresponding to each waveform
+            audio_names (list, optional): List of names for each waveform
+            save_results (bool): Whether to save results to files
+            output_dir (str, optional): Output directory for results
+            
+        Returns:
+            list: List of result dictionaries, one for each waveform
+        """
+        if len(waveforms) != len(sample_rates):
+            raise ValueError("Number of waveforms must match number of sample rates")
+        
+        if audio_names is None:
+            audio_names = [f"waveform_{i}" for i in range(len(waveforms))]
+        elif len(audio_names) != len(waveforms):
+            raise ValueError("Number of audio names must match number of waveforms")
+        
+        logger_info(f"Processing batch of {len(waveforms)} waveforms")
+        
+        # Process each waveform using the existing single waveform method
+        # This ensures reliability and consistency
+        results = []
+        for i, (waveform, sample_rate, audio_name) in enumerate(zip(waveforms, sample_rates, audio_names)):
+            logger_info(f"Processing waveform {i+1}/{len(waveforms)}: {audio_name}")
+            result = self.recognize_waveform(
+                waveform, 
+                sample_rate, 
+                save_results=save_results,
+                output_dir=output_dir,
+                audio_name=audio_name
+            )
+            results.append(result)
+        
+        logger_info(f"Batch processing completed: {len(results)} waveforms processed")
+        return results
+    
+    def _group_waveforms_by_length(self, waveforms, sample_rates, audio_names):
+        """
+        Group waveforms by similar lengths for efficient batch processing
+        """
+        # Calculate duration for each waveform
+        waveform_info = []
+        for waveform, sample_rate, audio_name in zip(waveforms, sample_rates, audio_names):
+            duration = len(waveform) / sample_rate
+            waveform_info.append((waveform, sample_rate, audio_name, duration))
+        
+        # Sort by duration
+        waveform_info.sort(key=lambda x: x[3])
+        
+        # Group by duration ranges (within 10% of each other)
+        groups = []
+        current_group = []
+        
+        for waveform, sample_rate, audio_name, duration in waveform_info:
+            if not current_group:
+                current_group = [(waveform, sample_rate, audio_name, duration)]
+            else:
+                # Check if this waveform can be grouped with current group
+                avg_duration = sum(info[3] for info in current_group) / len(current_group)
+                if abs(duration - avg_duration) / avg_duration < 0.1:  # Within 10%
+                    current_group.append((waveform, sample_rate, audio_name, duration))
+                else:
+                    # Start new group
+                    groups.append([(info[0], info[1], info[2]) for info in current_group])
+                    current_group = [(waveform, sample_rate, audio_name, duration)]
+        
+        # Add the last group
+        if current_group:
+            groups.append([(info[0], info[1], info[2]) for info in current_group])
+        
+        return groups
+    
+    def _process_waveform_batch(self, waveforms, sample_rates, audio_names):
+        """
+        Process a batch of waveforms with similar lengths efficiently
+        """
+        results = []
+        
+        # Process each waveform in the batch
+        for waveform, sample_rate, audio_name in zip(waveforms, sample_rates, audio_names):
+            # Convert waveform to features
+            feature, feature_per_second, song_length_second = waveform_to_features(
+                waveform, sample_rate, self.config
+            )
+            
+            # Prepare features
+            feature = feature.T
+            feature = (feature - self.mean) / self.std
+            time_unit = feature_per_second
+            n_timestep = self.config.model['timestep']
+            
+            # Pad features to match timestep
+            num_pad = n_timestep - (feature.shape[0] % n_timestep)
+            feature = np.pad(feature, ((0, num_pad), (0, 0)), mode="constant", constant_values=0)
+            num_instance = feature.shape[0] // n_timestep
+            
+            # Perform inference
+            start_time = 0.0
+            chord_segments = []
+            
+            with torch.no_grad():
+                self.model.eval()
+                feature_tensor = torch.tensor(feature, dtype=torch.float32).unsqueeze(0).to(self.device)
+                
+                for t in range(num_instance):
+                    self_attn_output, _ = self.model.self_attn_layers(
+                        feature_tensor[:, n_timestep * t:n_timestep * (t + 1), :]
+                    )
+                    prediction, _ = self.model.output_layer(self_attn_output)
+                    prediction = prediction.squeeze()
+                    
+                    for i in range(n_timestep):
+                        if t == 0 and i == 0:
+                            prev_chord = prediction[i].item()
+                            continue
+                        if prediction[i].item() != prev_chord:
+                            chord_segments.append({
+                                'start_time': start_time,
+                                'end_time': time_unit * (n_timestep * t + i),
+                                'chord': self.idx_to_chord[prev_chord]
+                            })
+                            start_time = time_unit * (n_timestep * t + i)
+                            prev_chord = prediction[i].item()
+                        if t == num_instance - 1 and i + num_pad == n_timestep:
+                            if start_time != time_unit * (n_timestep * t + i):
+                                chord_segments.append({
+                                    'start_time': start_time,
+                                    'end_time': time_unit * (n_timestep * t + i),
+                                    'chord': self.idx_to_chord[prev_chord]
+                                })
+                            break
+            
+            result = {
+                'audio_file': f"{audio_name} (waveform)",
+                'vocabulary_type': self.vocabulary_type,
+                'song_length': song_length_second,
+                'sample_rate': sample_rate,
+                'num_samples': len(waveform),
+                'chord_segments': chord_segments
+            }
+            
+            results.append(result)
+        
+        return results
     
     def recognize_batch(self, audio_dir, output_dir=None, file_extensions=('.mp3', '.wav')):
         """
