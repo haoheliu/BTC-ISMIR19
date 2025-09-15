@@ -148,6 +148,34 @@ class BTCChordRecognizer:
         else:
             raise FileNotFoundError(f"Model file not found: {model_file}")
     
+    def _apply_chord_delay(self, chord_segments, delay_seconds=0.1):
+        """
+        Apply a delay to chord segment timestamps to compensate for early detection
+        
+        Args:
+            chord_segments (list): List of chord segments
+            delay_seconds (float): Delay to apply in seconds
+            
+        Returns:
+            list: Updated chord segments with delayed timestamps
+        """
+        if not chord_segments:
+            return chord_segments
+            
+        updated_segments = []
+        for segment in chord_segments:
+            # Apply delay to start_time, ensuring it doesn't go below 0
+            new_start_time = max(0.0, segment['start_time'] + delay_seconds)
+            new_end_time = segment['end_time'] + delay_seconds
+            
+            updated_segments.append({
+                'start_time': new_start_time,
+                'end_time': new_end_time,
+                'chord': segment['chord']
+            })
+        
+        return updated_segments
+    
     def recognize_chords(self, audio_path, save_results=True, output_dir=None):
         """
         Recognize chords from an audio file
@@ -217,6 +245,9 @@ class BTCChordRecognizer:
                                 'chord': self.idx_to_chord[prev_chord]
                             })
                         break
+        
+        # Apply 0.1 second delay to compensate for early detection
+        chord_segments = self._apply_chord_delay(chord_segments, delay_seconds=0.08)
         
         results = {
             'audio_file': str(audio_path),
@@ -361,6 +392,9 @@ class BTCChordRecognizer:
                                 'chord': self.idx_to_chord[prev_chord]
                             })
                         break
+        
+        # Apply 0.1 second delay to compensate for early detection
+        chord_segments = self._apply_chord_delay(chord_segments, delay_seconds=0.1)
         
         results = {
             'audio_file': f"{audio_name} (waveform)",
@@ -574,6 +608,9 @@ class BTCChordRecognizer:
                                     'chord': self.idx_to_chord[prev_chord]
                                 })
                             break
+            
+            # Apply 0.1 second delay to compensate for early detection
+            chord_segments = self._apply_chord_delay(chord_segments, delay_seconds=0.1)
             
             result = {
                 'audio_file': f"{audio_name} (waveform)",

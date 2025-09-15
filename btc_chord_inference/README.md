@@ -10,6 +10,7 @@ A clean, reusable package for batch chord recognition using the Bi-directional T
 - **Real-time capable**: Waveform API enables real-time processing
 - **GPU/CPU support**: Automatic device detection and model loading
 - **Flexible audio handling**: Automatic resampling and mono conversion
+- **Early detection compensation**: Automatic 0.1 second delay applied to chord timestamps
 
 ## Installation
 
@@ -102,12 +103,13 @@ Recognize chords from multiple raw audio waveforms in batch.
 
 ### Chord Labels (.lab)
 ```
-0.000 10.000 N
-10.000 11.944 G#
-11.944 16.759 D#
-16.759 17.407 N
+0.100 10.100 N
+10.100 12.044 G#
+12.044 16.859 D#
+16.859 17.507 N
 ...
 ```
+*Note: All timestamps include a 0.1 second delay to compensate for early detection.*
 
 ### MIDI Files
 MIDI files are automatically generated with chord notes mapped to piano pitches.
@@ -122,13 +124,13 @@ MIDI files are automatically generated with chord notes mapped to piano pitches.
     'num_samples': 11342585,
     'chord_segments': [
         {
-            'start_time': 0.0,
-            'end_time': 10.0,
+            'start_time': 0.1,
+            'end_time': 10.1,
             'chord': 'N'
         },
         {
-            'start_time': 10.0,
-            'end_time': 11.944,
+            'start_time': 10.1,
+            'end_time': 12.044,
             'chord': 'G#'
         },
         ...
