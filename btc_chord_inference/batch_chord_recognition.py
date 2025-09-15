@@ -192,7 +192,7 @@ def main():
         save_results=not args.no_save,
         output_dir=args.output_dir
     )
-    
+    print(results)
     # Display results
     display_results(results)
     
