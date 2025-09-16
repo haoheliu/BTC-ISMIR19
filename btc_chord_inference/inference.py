@@ -14,10 +14,25 @@ from utils.mir_eval_modules import (
     idx2voca_chord, 
     get_audio_paths
 )
-
+import torch.nn as nn
 warnings.filterwarnings('ignore')
 logging_verbosity(1)
 
+def count_parameters(model: nn.Module, trainable_only: bool = False) -> int:
+    """
+    Count the number of parameters in a PyTorch model.
+    
+    Args:
+        model (nn.Module): The PyTorch model to inspect.
+        trainable_only (bool): If True, count only parameters with requires_grad=True.
+    
+    Returns:
+        int: Total number of parameters.
+    """
+    if trainable_only:
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
+    else:
+        return sum(p.numel() for p in model.parameters())
 
 def waveform_to_features(waveform, sample_rate, config):
     """
