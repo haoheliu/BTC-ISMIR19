@@ -1,10 +1,3 @@
-"""
-BTC Chord Recognition Inference Module
-====================================
-
-This module provides a clean interface for chord recognition using the BTC model.
-"""
-
 import os
 import torch
 import numpy as np
@@ -394,7 +387,7 @@ class BTCChordRecognizer:
                         break
         
         # Apply 0.1 second delay to compensate for early detection
-        chord_segments = self._apply_chord_delay(chord_segments, delay_seconds=0.1)
+        # chord_segments = self._apply_chord_delay(chord_segments, delay_seconds=0.1)
         
         results = {
             'audio_file': f"{audio_name} (waveform)",
@@ -610,7 +603,7 @@ class BTCChordRecognizer:
                             break
             
             # Apply 0.1 second delay to compensate for early detection
-            chord_segments = self._apply_chord_delay(chord_segments, delay_seconds=0.1)
+            # chord_segments = self._apply_chord_delay(chord_segments, delay_seconds=0.1)
             
             result = {
                 'audio_file': f"{audio_name} (waveform)",
